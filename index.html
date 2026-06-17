@@ -1798,12 +1798,15 @@
                 const did = +parts[1];
                 if (Number.isFinite(did)) {
                     const wantEdit = (parts[2] === 'edit');
+                    const playMode = (parts[2] === 'play' && parts[3]) ? parts[3] : null;
                     // Грузим список колод (для бэкграунда если потом «Назад»)
                     await loadDecks();
                     // Открываем колоду — но НЕ переписываем URL, чтобы /edit не потерять
                     await _openDeckNoUrl(did);
                     if (wantEdit && currentDeck && canEditDeck(currentDeck)) {
                         _openDeckEditNoUrl();
+                    } else if (playMode) {
+                        try { await startSession(playMode); } catch (e) { console.error('autostart', e); }
                     }
                     return;
                 }
