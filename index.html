@@ -781,12 +781,21 @@
         .flip-card.flashcard-mode .flip-card-front .flip-card-text,
         .flip-card.flashcard-mode .flip-card-front .flip-card-trans { display: none; }
 
+        /* Дриллинг: лицевая — только слово, оборот — картинка + перевод */
+        .flip-card.drill-mode .flip-card-back .flip-card-image {
+            width: 200px; height: 200px; margin-bottom: 14px;
+        }
+        .flip-card.drill-mode .flip-card-back .flip-card-text { font-size: 44px; }
+        .flip-card.drill-mode .flip-card-back .flip-card-example { margin-top: 12px; font-size: 15px; }
+
         @media (max-width: 720px) {
             .flip-container { max-width: 100%; }
             .flip-card { height: 380px; }
             .flip-card-text { font-size: 36px; }
             .flip-card-image { width: 200px; height: 200px; }
             .flip-card.flashcard-mode .flip-card-image { width: 240px; height: 240px; }
+            .flip-card.drill-mode .flip-card-back .flip-card-image { width: 140px; height: 140px; margin-bottom: 10px; }
+            .flip-card.drill-mode .flip-card-back .flip-card-text { font-size: 30px; }
         }
 
         .flip-answers {
@@ -2744,6 +2753,9 @@
                 words: wordsToStudy,
                 distractorPool: baseWords,
                 currentIdx: 0,
+                // Дриллинг: очередь с возвратом — карточка выбывает только по «легко»
+                drillQueue: mode === 'flip' ? [...wordsToStudy] : null,
+                drillSeen: new Set(),
                 results: [],
                 correctCount: 0,
                 startedAt: Date.now(),
@@ -2808,13 +2820,22 @@
 
         function renderCard() {
             const s = currentSession;
-            const word = s.words[s.currentIdx];
+            const isDrill = s.mode === 'flip' && s.drillQueue;
+            const word = isDrill ? s.drillQueue[0] : s.words[s.currentIdx];
             currentWord = word;
 
             const total = s.words.length;
-            const cur = s.currentIdx + 1;
-            document.getElementById('sessProgressText').textContent = `${cur} / ${total}`;
-            document.getElementById('sessProgressFill').style.width = `${(cur / total) * 100}%`;
+            if (isDrill) {
+                // Число предъявлений заранее неизвестно — показываем, сколько осталось закрыть
+                const left = s.drillQueue.length;
+                const done = total - left;
+                document.getElementById('sessProgressText').textContent = `осталось ${left} из ${total}`;
+                document.getElementById('sessProgressFill').style.width = `${(done / total) * 100}%`;
+            } else {
+                const cur = s.currentIdx + 1;
+                document.getElementById('sessProgressText').textContent = `${cur} / ${total}`;
+                document.getElementById('sessProgressFill').style.width = `${(cur / total) * 100}%`;
+            }
             document.getElementById('sessStreak').textContent = s.correctCount;
 
             if (s.mode === 'choice4') {
@@ -2836,6 +2857,7 @@
             const card = document.getElementById('flipCard');
             card.classList.remove('flipped');
             card.classList.toggle('flashcard-mode', mode === 'flashcard');
+            card.classList.toggle('drill-mode', mode === 'flip');
 
             const frontImg = document.getElementById('flipFrontImage');
             const backImg  = document.getElementById('flipBackImage');
@@ -2862,18 +2884,18 @@
                 backText.textContent  = word.term;
                 backExample.textContent = word.example_sentence || '';
             } else {
-                // Классический дриллинг flip: слово ↔ перевод (картинка опционально маленькая)
+                // Дриллинг: лицевая — только английское слово, оборот — картинка + перевод
                 frontHint.textContent = 'КАК ПЕРЕВЕСТИ?';
                 backHint.textContent  = 'ПЕРЕВОД';
+                frontImg.classList.remove('has-image');   // на лицевой картинки нет — она подсказывала ответ
                 if (word.image_url) {
-                    frontImg.style.backgroundImage = `url('${word.image_url}')`;
-                    frontImg.classList.add('has-image');
+                    backImg.style.backgroundImage = `url('${word.image_url}')`;
+                    backImg.classList.add('has-image');
                 } else {
-                    frontImg.classList.remove('has-image');
+                    backImg.classList.remove('has-image');
                 }
-                backImg.classList.remove('has-image');
                 frontText.textContent  = word.term;
-                frontTrans.textContent = word.transcription || '';
+                frontTrans.textContent = '';
                 backText.textContent   = word.translation;
                 backExample.textContent = word.example_sentence || '';
             }
@@ -3700,14 +3722,28 @@
 
         async function answerCard(quality) {
             const s = currentSession;
-            const word = s.words[s.currentIdx];
+            const isDrill = s.mode === 'flip' && s.drillQueue;
+            const word = isDrill ? s.drillQueue[0] : s.words[s.currentIdx];
 
-            s.results.push({ wordId: word.id, quality });
-            if (quality >= 3) s.correctCount++;
+            // В дриллинге слово может встретиться несколько раз — считаем только первую оценку,
+            // иначе SM-2 всегда получал бы финальное «легко»
+            const firstTime = !isDrill || !s.drillSeen.has(word.id);
+            if (firstTime) {
+                s.drillSeen.add(word.id);
+                s.results.push({ wordId: word.id, quality });
+                if (quality >= 3) s.correctCount++;
+                if (studentCtx) {
+                    await saveWordProgress(word.id, quality);
+                }
+            }
 
-            // Если есть ученик — пишем прогресс в БД (SRS)
-            if (studentCtx) {
-                await saveWordProgress(word.id, quality);
+            if (isDrill) {
+                s.drillQueue.shift();
+                // «Легко» закрывает карточку, «не знал» и «с трудом» — в конец очереди
+                if (quality < 5) s.drillQueue.push(word);
+                if (!s.drillQueue.length) await finishSession();
+                else renderCard();
+                return;
             }
 
             // Следующее слово или результат
