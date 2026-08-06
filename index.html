@@ -629,6 +629,44 @@
         }
         .word-row .word-tts:hover { background: #E0D9FF; }
 
+        /* ---- выбор отдельных карточек ---- */
+        .word-row.selectable { cursor: pointer; }
+        .word-row.sel { background: var(--purple-light); }
+        .word-check {
+            width: 18px; height: 18px; flex: none;
+            margin-right: 12px;
+            accent-color: var(--purple);
+            cursor: pointer;
+        }
+        .word-noimg {
+            width: 40px; height: 40px; flex: none;
+            margin-right: 12px;
+            border-radius: 8px;
+            background: var(--purple-light);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; opacity: .5;
+        }
+        .sel-bar {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+            margin-bottom: 10px;
+            padding: 10px 14px;
+            background: var(--purple-light);
+            border-radius: var(--radius);
+            font-size: 14px; font-weight: 800;
+        }
+        .sel-bar .sel-count { color: var(--purple-dark); }
+        .sel-bar .sel-hint { font-weight: 600; font-size: 13px; color: var(--gray-text); }
+        .sel-bar button {
+            background: #fff; color: var(--purple);
+            border: 1.5px solid var(--purple);
+            border-radius: 999px;
+            padding: 5px 12px;
+            font: inherit; font-size: 13px; font-weight: 700;
+            cursor: pointer;
+        }
+        .sel-bar button:hover { border-color: var(--purple-dark); color: var(--purple-dark); }
+        .mode-card.mode-off { opacity: .35; filter: grayscale(1); pointer-events: none; }
+
         /* ============ SESSION ============ */
         .session-top {
             display: flex; justify-content: space-between; align-items: center;
@@ -1438,37 +1476,37 @@
                     </div>
                     <h3 style="margin-bottom:10px;">Выбери режим тренировки</h3>
                     <div class="modes-grid">
-                        <button class="mode-card" onclick="startSession('flip')">
+                        <button class="mode-card" data-mode="flip" onclick="startSession('flip')">
                             <div class="mode-emoji">🃏</div>
                             <div class="mode-name">Дриллинг</div>
                             <div class="mode-desc">Слово ↔ перевод</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('flashcard')">
+                        <button class="mode-card" data-mode="flashcard" onclick="startSession('flashcard')">
                             <div class="mode-emoji">📸</div>
                             <div class="mode-name">Flashcards</div>
                             <div class="mode-desc">Картинка → слово</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('choice4')">
+                        <button class="mode-card" data-mode="choice4" onclick="startSession('choice4')">
                             <div class="mode-emoji">🎯</div>
                             <div class="mode-name">4 варианта</div>
                             <div class="mode-desc">Картинка → выбери слово</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('match')">
+                        <button class="mode-card" data-mode="match" onclick="startSession('match')">
                             <div class="mode-emoji">🔗</div>
                             <div class="mode-name">Match pairs</div>
                             <div class="mode-desc">Соедини картинки и слова</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('memory')">
+                        <button class="mode-card" data-mode="memory" onclick="startSession('memory')">
                             <div class="mode-emoji">🧠</div>
                             <div class="mode-name">Memory</div>
                             <div class="mode-desc">Запомни и найди пары</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('unscramble')">
+                        <button class="mode-card" data-mode="unscramble" onclick="startSession('unscramble')">
                             <div class="mode-emoji">🔤</div>
                             <div class="mode-name">Unscramble</div>
                             <div class="mode-desc">Собери слово из букв</div>
                         </button>
-                        <button class="mode-card" onclick="startSession('hangman')">
+                        <button class="mode-card" data-mode="hangman" onclick="startSession('hangman')">
                             <div class="mode-emoji">🍕</div>
                             <div class="mode-name">Угадай слово</div>
                             <div class="mode-desc">Нажимай буквы — не съешь пиццу!</div>
@@ -1477,6 +1515,12 @@
                 </div>
 
                 <h3 style="margin: 24px 0 10px;">Слова в колоде</h3>
+                <div id="deckSelBar" class="sel-bar" style="display:none;">
+                    <span class="sel-count" id="selCount">Ничего не выбрано</span>
+                    <button onclick="selectAllWords()">Выбрать все</button>
+                    <button onclick="clearWordSel()">Снять</button>
+                    <span class="sel-hint" id="selHint"></span>
+                </div>
                 <div id="deckWordsList" class="words-list">
                     <!-- слова рендерятся -->
                 </div>
@@ -2429,6 +2473,9 @@
             const d = deckRes.data;
             currentDeck = { ...d, words: wordsRes.data || [] };
 
+            // Выбор карточек разовый — при открытии колоды всегда пустой
+            selectedWordIds.clear();
+
             document.getElementById('deckHeaderCover').textContent = d.cover_emoji || '📚';
             document.getElementById('deckHeaderTitle').textContent = d.title;
             const wordCount = (wordsRes.data || []).length;
@@ -2446,9 +2493,11 @@
             const list = document.getElementById('deckWordsList');
             if (!currentDeck.words.length) {
                 list.innerHTML = '<div style="padding:30px; text-align:center; color:var(--gray-light);">В колоде пока нет слов</div>';
+                refreshSelectionUI();
                 return;
             }
             list.innerHTML = renderDeckWordsList(currentDeck.words);
+            refreshSelectionUI();
         }
 
         function renderDeckWordsList(words) {
@@ -2476,14 +2525,120 @@
             }).join('');
         }
         function renderWordRow(w) {
+            const sel = selectedWordIds.has(w.id);
             return `
-                <div class="word-row">
-                    ${w.image_url ? `<img src="${escapeAttr(w.image_url)}" style="width:40px; height:40px; border-radius:8px; object-fit:cover; margin-right:12px;" />` : ''}
+                <div class="word-row selectable${sel ? ' sel' : ''}" data-word-id="${w.id}" onclick="toggleWordSel(${w.id})">
+                    <input type="checkbox" class="word-check" ${sel ? 'checked' : ''}
+                           onclick="event.stopPropagation(); toggleWordSel(${w.id});" />
+                    ${w.image_url
+                        ? `<img src="${escapeAttr(w.image_url)}" style="width:40px; height:40px; border-radius:8px; object-fit:cover; margin-right:12px;" />`
+                        : `<span class="word-noimg" title="Нет картинки — доступен только дриллинг">🚫</span>`}
                     <div class="word-term">${escapeHtml(w.term)}</div>
                     <div class="word-trans">${escapeHtml(w.translation)}</div>
-                    <button class="word-tts" onclick="speakWord('${escapeAttr(w.term)}')" title="Озвучить">🔊</button>
+                    <button class="word-tts" onclick="event.stopPropagation(); speakWord('${escapeAttr(w.term)}')" title="Озвучить">🔊</button>
                 </div>
             `;
+        }
+
+        // ----- Выбор отдельных карточек (разовый, живёт до ухода с колоды) -----
+        let selectedWordIds = new Set();
+
+        // Режимы, которым обязательно нужна картинка у слова
+        const IMAGE_MODES = ['flashcard', 'choice4', 'match', 'memory', 'unscramble', 'hangman'];
+
+        // Слова, из которых будет собрана сессия: выбор перебивает фильтр по секции
+        function getEffectiveWords() {
+            if (!currentDeck) return [];
+            if (selectedWordIds.size) {
+                return currentDeck.words.filter(w => selectedWordIds.has(w.id));
+            }
+            if (currentSectionFilter) {
+                return currentDeck.words.filter(w => (w.section || '').trim() === currentSectionFilter);
+            }
+            return currentDeck.words;
+        }
+
+        function toggleWordSel(id) {
+            if (selectedWordIds.has(id)) selectedWordIds.delete(id);
+            else selectedWordIds.add(id);
+
+            const row = document.querySelector(`.word-row[data-word-id="${id}"]`);
+            if (row) {
+                const on = selectedWordIds.has(id);
+                row.classList.toggle('sel', on);
+                const chk = row.querySelector('.word-check');
+                if (chk) chk.checked = on;
+            }
+            refreshSelectionUI();
+        }
+
+        function selectAllWords() {
+            if (!currentDeck) return;
+            // «Выбрать все» уважает текущий фильтр по секции
+            const pool = currentSectionFilter
+                ? currentDeck.words.filter(w => (w.section || '').trim() === currentSectionFilter)
+                : currentDeck.words;
+            pool.forEach(w => selectedWordIds.add(w.id));
+            repaintWordSelection();
+            refreshSelectionUI();
+        }
+
+        function clearWordSel() {
+            selectedWordIds.clear();
+            repaintWordSelection();
+            refreshSelectionUI();
+        }
+
+        function repaintWordSelection() {
+            document.querySelectorAll('#deckWordsList .word-row').forEach(row => {
+                const id = Number(row.dataset.wordId);
+                const on = selectedWordIds.has(id);
+                row.classList.toggle('sel', on);
+                const chk = row.querySelector('.word-check');
+                if (chk) chk.checked = on;
+            });
+        }
+
+        function refreshSelectionUI() {
+            const bar = document.getElementById('deckSelBar');
+            if (!bar || !currentDeck) return;
+            bar.style.display = currentDeck.words.length ? '' : 'none';
+
+            const n = selectedWordIds.size;
+            document.getElementById('selCount').textContent =
+                n ? `Выбрано ${n}` : 'Ничего не выбрано';
+
+            const pool = getEffectiveWords();
+            const withImg = pool.filter(w => w.image_url).length;
+            const hint = document.getElementById('selHint');
+            if (n) {
+                hint.textContent = withImg === n
+                    ? '— все с картинками'
+                    : `— с картинками ${withImg} из ${n}`;
+            } else {
+                hint.textContent = 'Отметь карточки, чтобы тренировать только их';
+            }
+            updateModeAvailability();
+        }
+
+        // Гасим режимы, которые нельзя запустить на текущем наборе слов
+        function updateModeAvailability() {
+            const pool = getEffectiveWords();
+            const withImg = pool.filter(w => w.image_url).length;
+            document.querySelectorAll('.mode-card[data-mode]').forEach(card => {
+                const mode = card.dataset.mode;
+                let off = false;
+                if (IMAGE_MODES.includes(mode)) {
+                    off = withImg < 1;
+                    if (!off && ['choice4', 'match', 'memory'].includes(mode)) off = withImg < 4;
+                }
+                card.classList.toggle('mode-off', off);
+                card.title = off
+                    ? (withImg < 1
+                        ? 'Нужны слова с картинками — в выбранном наборе их нет'
+                        : `Нужно минимум 4 слова с картинками, сейчас ${withImg}`)
+                    : '';
+            });
         }
 
         // ----- Чипсы выбора секции -----
@@ -2525,6 +2680,10 @@
                 const isMatch = (c.dataset.section || '') === (name || '');
                 c.classList.toggle('active', isMatch);
             });
+            // Смена раздела сбрасывает поштучный выбор — иначе два фильтра спорят друг с другом
+            selectedWordIds.clear();
+            repaintWordSelection();
+            refreshSelectionUI();
         }
 
         // ============================================================
@@ -2542,14 +2701,13 @@
             if (!currentDeck) return;
             if (!currentDeck.words.length) { alert('В колоде нет слов'); return; }
 
-            // Фильтр по секции (если выбрана)
-            let baseWords = currentDeck.words;
-            if (currentSectionFilter) {
-                baseWords = currentDeck.words.filter(w => (w.section || '').trim() === currentSectionFilter);
-                if (!baseWords.length) {
-                    alert(`В разделе «${currentSectionFilter}» нет слов`);
-                    return;
-                }
+            // Поштучный выбор карточек перебивает фильтр по секции
+            let baseWords = getEffectiveWords();
+            if (!baseWords.length) {
+                alert(selectedWordIds.size
+                    ? 'Выбранные карточки не найдены в колоде'
+                    : `В разделе «${currentSectionFilter}» нет слов`);
+                return;
             }
 
             // Режимы которым нужны картинки
