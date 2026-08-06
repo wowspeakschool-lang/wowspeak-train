@@ -1362,7 +1362,7 @@
         }
         .result-stat.highlight .result-stat-value { color: #C2410C; }
         .result-actions {
-            display: flex; gap: 10px; justify-content: center;
+            display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
         }
 
         @media (max-width: 600px) {
@@ -1726,8 +1726,9 @@
                     </div>
 
                     <div class="result-actions">
-                        <button class="btn btn-secondary btn-large" onclick="showScreen('deck'); loadDeckDetail(currentSession.deckId)">Ещё раз</button>
-                        <button class="btn btn-primary btn-large" onclick="showScreen('decks'); loadDecks();">К колодам</button>
+                        <button class="btn btn-primary btn-large" onclick="replaySession()">Ещё раз</button>
+                        <button class="btn btn-secondary btn-large" onclick="backToDeckFromResult()">Другой режим</button>
+                        <button class="btn btn-secondary btn-large" onclick="backToDecks()">К колодам</button>
                     </div>
                 </div>
             </section>
@@ -3832,6 +3833,21 @@
             document.getElementById('resultTime').textContent = formatDuration(durationSec);
             document.getElementById('resultPoints').textContent = '+' + points;
             showScreen('result');
+        }
+
+        // С экрана результата: повторить тот же режим на той же колоде
+        function replaySession() {
+            const s = currentSession;
+            if (!s || !currentDeck) { backToDecks(); return; }
+            startSession(s.mode);
+        }
+
+        // С экрана результата: вернуться к самому юниту, чтобы выбрать другой режим
+        function backToDeckFromResult() {
+            const deckId = currentSession?.deckId || currentDeck?.id;
+            if (!deckId) { backToDecks(); return; }
+            showScreen('deck');
+            loadDeckDetail(deckId);
         }
 
         function confirmExitSession() {
