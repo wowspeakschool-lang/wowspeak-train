@@ -1462,6 +1462,21 @@
             .deck-cover { font-size: 30px; }
             .deck-title { font-size: 14px; }
         }
+
+        /* Белая подложка под картинкой слова: вырезка фона не идеальна, на белом
+           остатки не видны, а белые детали (облака, футболки) читаются. */
+        .flip-card-image, .choice4-image, .choice4-image-btn, .match-item-image,
+        .memory-card-back:not(.is-word), .unscramble-image, .hangman-word-image,
+        .edit-word-img {
+            background-color: #fff !important;
+            background-size: contain !important;
+            background-repeat: no-repeat;
+            background-origin: content-box;
+            padding: 6%;
+        }
+        .match-item-image { border: 1.5px solid #ece8f5; }
+        .memory-card-back:not(.is-word) { padding: 10px; }
+        .edit-word-img { padding: 3px; }
     </style>
 </head>
 <body>
