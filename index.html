@@ -2,6 +2,22 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <!-- 14.10.2026, решение владельца: тренажёр перенесён в платформу
+         (app.wowteach.ru → «Материалы» / «Контент» → «Тренажёр»), train закрыт.
+         Код ниже не удалён — просто не успевает запуститься: сразу уводим на
+         платформу, сохраняя колоду/папку и ?student=. Картинки слов из media/
+         скопированы на app.wowteach.ru/trainer/media/, здесь оставлены. -->
+    <script>
+    (function () {
+        var p = (location.hash || '').replace(/^#/, '').split('/');
+        var sub = '';
+        if (p[0] === 'folder' && /^\d+$/.test(p[1] || '')) sub = '/folder/' + p[1];
+        else if (p[0] === 'deck' && /^\d+$/.test(p[1] || '')) sub = '/deck/' + p[1] + (p[2] === 'edit' ? '/edit' : '');
+        else if (p[0] === 'verbs') sub = '/verbs';
+        var st = new URLSearchParams(location.search).get('student');
+        location.replace('https://app.wowteach.ru/' + (st ? '?student=' + encodeURIComponent(st) : '') + '#/trainer' + sub);
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#7B61FF">
     <title>📖 WowSpeak Train — словарный тренажёр</title>
